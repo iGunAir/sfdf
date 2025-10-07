@@ -1,4 +1,4 @@
-name: Create Multiple Repositories (Fixed)
+name: Create Multiple Repositories (PAT Fixed)
 
 on:
   workflow_dispatch:
@@ -25,14 +25,9 @@ jobs:
 
       - name: Setup generator
         run: |
-          # Kata-kata stock untuk nama repo
           WORDS=("alpha" "beta" "gamma" "delta" "epsilon" "theta" "sigma" "nova" "quantum" "lumen" "orbit" "vector" "matrix" "core" "byte" "pixel" "neon")
-
-          # Bahasa dan ekstensi file
           LANGS=("python" "cpp" "golang" "swift" "java" "javascript" "ruby")
           EXT=("py" "cpp" "go" "swift" "java" "js" "rb")
-
-          # Template isi file per bahasa
           CONTENTS=("print('im rixzstore')" "cout << 'im rixzstore';" "fmt.Println('im rixzstore')" "print('im rixzstore')" "System.out.println('im rixzstore');" "console.log('im rixzstore');" "puts 'im rixzstore'")
 
           echo "WORDS=${WORDS[*]}" >> $GITHUB_ENV
@@ -60,15 +55,15 @@ jobs:
           for i in $(seq 1 $COUNT); do
             WORD_NUM=$((RANDOM % (MAX_WORDS - MIN_WORDS + 1) + MIN_WORDS))
 
-            # Buat nama repo aman (hanya huruf, angka, dash)
+            # Buat nama repo aman
             while true; do
               NAME=""
               for j in $(seq 1 $WORD_NUM); do
                 WORD="${WORDS[$RANDOM % ${#WORDS[@]}]}"
-                WORD=$(echo "$WORD" | tr -cd 'a-zA-Z0-9')  # hapus karakter ilegal
+                WORD=$(echo "$WORD" | tr -cd 'a-zA-Z0-9')  # hanya huruf dan angka
                 NAME+="${WORD}-"
               done
-              NAME=${NAME%-}  # hapus trailing dash
+              NAME=${NAME%-}
               if [[ -z "${USED_NAMES[$NAME]}" ]]; then
                 USED_NAMES[$NAME]=1
                 break
@@ -84,23 +79,25 @@ jobs:
 
             echo "Creating repo $NAME with $FILE_NAME ($LANG)"
 
+            # Buat JSON payload valid pakai jq
+            DATA=$(jq -n --arg name "$NAME" '{"name":$name,"auto_init":true}')
+
             # Buat repository via GitHub API
             curl -s -H "Authorization: token $PAT_TOKEN" \
                  -H "Accept: application/vnd.github+json" \
-                 -d "{\"name\":\"$NAME\",\"auto_init\":true}" \
+                 -d "$DATA" \
                  https://api.github.com/user/repos
 
             # Clone repo dengan PAT
             git clone https://$PAT_TOKEN@github.com/$GITHUB_USER/$NAME.git
             cd $NAME
 
-            # Set git identity agar commit berhasil
+            # Set git identity
             git config user.name "GitHub Actions Bot"
             git config user.email "actions@github.com"
 
-            # Buat file dengan isi sesuai bahasa
+            # Buat file awal
             echo "$FILE_CONTENT" > $FILE_NAME
-
             git add $FILE_NAME
             git commit -m "Add initial file $FILE_NAME"
             git push origin main
