@@ -1,4 +1,4 @@
-name: Create Multiple Repositories
+name: Create Multiple Repositories (Fixed)
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       repo_count:
         description: 'Jumlah repository yang ingin dibuat'
         required: true
-        default: 22
+        default: 5
       min_words:
         description: 'Minimal kata untuk nama repo'
         required: true
@@ -23,7 +23,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Setup repository generator
+      - name: Setup generator
         run: |
           # Kata-kata stock untuk nama repo
           WORDS=("alpha" "beta" "gamma" "delta" "epsilon" "theta" "sigma" "nova" "quantum" "lumen" "orbit" "vector" "matrix" "core" "byte" "pixel" "neon")
@@ -43,6 +43,7 @@ jobs:
       - name: Create repositories
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GITHUB_USER: ${{ github.repository_owner }}
         run: |
           IFS=' ' read -r -a WORDS <<< "$WORDS"
           IFS=' ' read -r -a LANGS <<< "$LANGS"
@@ -57,16 +58,17 @@ jobs:
           echo "Creating $COUNT repositories..."
 
           for i in $(seq 1 $COUNT); do
-            # Tentukan jumlah kata random untuk nama repo
             WORD_NUM=$((RANDOM % (MAX_WORDS - MIN_WORDS + 1) + MIN_WORDS))
 
-            # Buat nama repo unik
+            # Buat nama repo aman (hanya huruf, angka, dash)
             while true; do
               NAME=""
               for j in $(seq 1 $WORD_NUM); do
-                NAME+="${WORDS[$RANDOM % ${#WORDS[@]}]}-"
+                WORD="${WORDS[$RANDOM % ${#WORDS[@]}]}"
+                WORD=$(echo "$WORD" | tr -cd 'a-zA-Z0-9')  # hapus karakter ilegal
+                NAME+="${WORD}-"
               done
-              NAME=${NAME%-}  # Hapus trailing "-"
+              NAME=${NAME%-}  # hapus trailing dash
               if [[ -z "${USED_NAMES[$NAME]}" ]]; then
                 USED_NAMES[$NAME]=1
                 break
@@ -82,16 +84,17 @@ jobs:
 
             echo "Creating repo $NAME with $FILE_NAME ($LANG)"
 
-            # Buat repository via API dengan PAT
+            # Buat repository via GitHub API
             curl -s -H "Authorization: token $PAT_TOKEN" \
+                 -H "Accept: application/vnd.github+json" \
                  -d "{\"name\":\"$NAME\",\"auto_init\":true}" \
                  https://api.github.com/user/repos
 
-            # Clone repo sementara
-            git clone https://$PAT_TOKEN@github.com/${{ github.repository_owner }}/$NAME.git
+            # Clone repo dengan PAT
+            git clone https://$PAT_TOKEN@github.com/$GITHUB_USER/$NAME.git
             cd $NAME
 
-            # Set git identity agar commit bisa berhasil
+            # Set git identity agar commit berhasil
             git config user.name "GitHub Actions Bot"
             git config user.email "actions@github.com"
 
